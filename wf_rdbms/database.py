@@ -1,4 +1,4 @@
-from .utils import to_date
+import wf_rdbms.utils
 import pandas as pd
 import logging
 
@@ -27,7 +27,7 @@ TYPES = {
     },
     'date': {
         'pandas_dtype': 'object',
-        'converter': lambda x: x.apply(to_date)
+        'converter': lambda x: x.apply(wf_rdbms.utils.to_date)
     },
     'list': {
         'pandas_dtype': 'object',

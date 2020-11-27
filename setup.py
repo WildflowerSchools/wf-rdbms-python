@@ -8,8 +8,6 @@ VERSION = open(os.path.join(BASEDIR, 'VERSION')).read().strip()
 BASE_DEPENDENCIES = [
     'pandas>=1.1',
     'numpy>=1.19',
-    'requests>=2.25',
-    'gspread-pandas>=2.2'
 ]
 
 # TEST_DEPENDENCIES = [
@@ -25,13 +23,13 @@ BASE_DEPENDENCIES = [
 os.chdir(os.path.normpath(BASEDIR))
 
 setup(
-    name='wf-base-data-python',
+    name='wf-rdbms-python',
     packages=find_packages(),
     version=VERSION,
     include_package_data=True,
-    description='Python tools for working with Wildflower Schools base data',
+    description='Python tools for defining and interacting with simple relational databases',
     long_description=open('README.md').read(),
-    url='https://github.com/tcquinn/wf-base-data-python',
+    url='https://github.com/WildflowerSchools/wf-rdbms-python',
     author='Theodore Quinn',
     author_email='ted.quinn@wildflowerschools.org',
     install_requires=BASE_DEPENDENCIES,

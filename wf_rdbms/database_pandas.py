@@ -1,4 +1,4 @@
-from .database import Database, DataTable, TYPES
+from wf_rdbms.database import Database, DataTable, TYPES
 import pandas as pd
 from collections import OrderedDict
 import logging
