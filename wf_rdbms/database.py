@@ -7,32 +7,38 @@ logger = logging.getLogger(__name__)
 TYPES = {
     'integer': {
         'pandas_dtype': 'Int64',
-        'converter': lambda x: x.astype('Int64')
+        'to_pandas_series': lambda x: pd.Series(x, dtype='Int64'),
+        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(pd.Series(x, dtype='Int64'))
     },
     'float': {
         'pandas_dtype': 'float',
-        'converter': lambda x: x.astype('float')
+        'to_pandas_series': lambda x: pd.Series(x, dtype='float'),
+        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(pd.Series(x, dtype='float'))
     },
     'string': {
         'pandas_dtype': 'string',
-        'converter': lambda x: x.astype('string')
+        'to_pandas_series': lambda x: pd.Series(x, dtype='string'),
+        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(pd.Series(x, dtype='string'))
     },
     'boolean': {
         'pandas_dtype': 'boolean',
-        'converter': lambda x: x.astype('boolean')
+        'to_pandas_series': lambda x: pd.Series(x, dtype='boolean'),
+        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(pd.Series(x, dtype='boolean'))
     },
     'datetime': {
         'pandas_dtype': 'datetime64[ns]',
-        'converter': pd.to_datetime
+        'to_pandas_series': lambda x: pd.to_datetime(x),
+        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(pd.to_datetime(x).to_pydatetime())
     },
     'date': {
         'pandas_dtype': 'object',
-        'converter': lambda x: x.apply(wf_rdbms.utils.to_date)
+        'to_pandas_series': lambda x: pd.Series(x).apply(wf_rdbms.utils.to_date),
+        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(pd.Series(x).apply(wf_rdbms.utils.to_date))
     },
     'list': {
         'pandas_dtype': 'object',
-        # 'converter': lambda x: [list(item) for item in x]
-        'converter': lambda x: x
+        'to_pandas_series': lambda x: pd.Series(x).where(pd.notnull(pd.Series(x)), None),
+        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(d.Series(x).apply(lambda y: list(y) if pd.notnull(y) else None))
     }
 }
 
@@ -42,60 +48,64 @@ class Database:
     """
     def __init__(
         self,
-        database_schema
+        name,
+        tables
     ):
         """
         Contructor for Database
 
-        The database schema input should be a dict with data table names
-        as keys and data table schemas as values. See DataTable object for data
-        table schema format.
+        The tables input should be a list of Table objects. See documentation
+        for Table
 
         Parameters:
-            database_schema (dict): Database schema
+            name (str) The name of this database
+            tables (list of Table): Tables that make up the database
         """
-        self.database_schema = database_schema
-        self._init()
-
-    def _init(self):
-        raise NotImplementedError('Method must be implemented by child class')
+        self.name=name
+        self.tables = {table.name: table for table in tables}
 
     def check_integrity(self):
-        for data_table_name, data_table in self.data_tables.items():
-            logger.info('Checking integrity of data table: {}'.format(data_table_name))
-            data_table.check_integrity()
+        for table in self.tables.values():
+            logger.info('Checking integrity of table: {}'.format(table.name))
+            table.check_integrity()
 
-class DataTable:
+class Table:
     """
-    Class to define a generic data table object
+    Class to define a generic table object
     """
     def __init__(
         self,
-        data_table_schema
+        name,
+        fields,
+        primary_key,
+        foreign_keys=None
     ):
         """
-        Contructor for DataTable
+        Contructor for Table
 
-        The data table schema should be an OrderedDict with field names as keys
-        and field schemas as values. Field schemas should be dicts with the
-        format {'type': TYPE_NAME, 'key': [True|False]}. Possible type names are
-        'integer', 'float', 'string', 'boolean', 'datetime', 'date', or 'list'.
+        A table consists of a set of fields (table columns) along with some
+        table-level constraints. Currently the class supports two kinds of
+        table-level constraints: a required primary key and zero or more
+        optional foreign keys.
+
+        The primary key is simply a list of the field names from this Table that
+        comprise the primary key. Each foreign key is a tuple consisting of the
+        name of the target table and the list of the field names from this Table
+        that correspond to the primary key of the target table.
 
         Parameters:
-            data_table_schema (OrderedDict): Data table schema
+            name (str): The name of this table
+            fields (list of Field): Fields that make up the Table
+            primary_key (list of str): Fields that comprise the primary key of this table
+            foreign_keys (list of tuple): Tuples consisting of target table name and fields from this table
         """
-        self.data_table_schema = data_table_schema
-        self.key_field_names = list()
-        self.value_field_names = list()
-        for field_name, field_schema in data_table_schema.items():
-            if field_schema.get('key', False):
-                self.key_field_names.append(field_name)
-            else:
-                self.value_field_names.append(field_name)
-        self._init()
-
-    def _init(self):
-        raise NotImplementedError('Method must be implemented by child class')
+        self.name = name
+        self.fields = fields
+        self.primary_key = primary_key
+        self.foreign_keys = foreign_keys
+        self.field_names = [field.name for field in self.fields]
+        self.key_field_names = primary_key
+        self.value_field_names = [field_name for field_name in self.field_names if field_name not in self.key_field_names]
 
     def create_records(self, records):
         """
@@ -111,13 +121,6 @@ class DataTable:
         Returns:
             (list of tuples): Key values for created records
         """
-        records = self.normalize_records(records)
-        logger.info('Attempting to create {} records'.format(len(records)))
-        return_key_values = self._create_records(records)
-        self.check_integrity()
-        return return_key_values
-
-    def _create_records(self, records):
         raise NotImplementedError('Method must be implemented by child class')
 
     def update_records(self, records):
@@ -134,13 +137,6 @@ class DataTable:
         Returns:
             (list of tuples): Key values for updated records
         """
-        records = self.normalize_records(records)
-        logger.info('Attempting to update {} records'.format(len(records)))
-        return_key_values = self._update_records(records)
-        self.check_integrity()
-        return return_key_values
-
-    def _update_records(self, records):
         raise NotImplementedError('Method must be implemented by child class')
 
     def delete_records(self, records):
@@ -157,13 +153,6 @@ class DataTable:
         Returns:
             (list of tuples): Key values for deleted records
         """
-        records = self.normalize_records(records)
-        logger.info('Attempting to delete {} records'.format(len(records)))
-        return_key_values = self._delete_records(records)
-        self.check_integrity()
-        return return_key_values
-
-    def _delete_records(self, records):
         raise NotImplementedError('Method must be implemented by child class')
 
     def dataframe(self):
@@ -173,10 +162,6 @@ class DataTable:
         Returns:
             (DataFrame): Pandas dataframe containing the data in the data table
         """
-        dataframe = self._dataframe()
-        return dataframe
-
-    def _dataframe(self):
         raise NotImplementedError('Method must be implemented by child class')
 
     def keys(self):
@@ -195,10 +180,6 @@ class DataTable:
         Returns:
             (Index): Pandas index containing all key values in the data table
         """
-        index = self._index()
-        return index
-
-    def _index(self):
         raise NotImplementedError('Method must be implemented by child class')
 
     def normalize_records(self, records, normalize_value_columns=True):
@@ -244,8 +225,8 @@ class DataTable:
 
     def type_convert_columns(self, dataframe):
         logger.info('Converting data types for input records')
-        for field_name, field_schema in self.data_table_schema.items():
-            dataframe[field_name] = TYPES[field_schema['type']]['converter'](dataframe[field_name])
+        for field in self.fields:
+            dataframe[field.name] = TYPES[field.type]['to_pandas_series'](dataframe[field.name])
         return dataframe
 
     def check_integrity(self):
@@ -266,23 +247,64 @@ class DataTable:
             logger.info('Data table has no entries. Skipping dtype checking.')
             return
         logger.info('Checking dtype of each field')
-        for key_field_name in self.key_field_names:
-            logger.info('Checking dtype of key field: {}'.format(key_field_name))
-            field_dtype = df.index.get_level_values(key_field_name).dtype
-            schema_dtype = TYPES[self.data_table_schema[key_field_name]['type']]['pandas_dtype']
-            if field_dtype != schema_dtype:
-                raise ValueError('Key field {} has dtype {} but schema specifies dtype {}'.format(
-                    key_field_name,
-                    field_dtype,
-                    schema_dtype
-                ))
-        for value_field_name in self.value_field_names:
-            logger.info('Checking dtype of value field: {}'.format(value_field_name))
-            field_dtype = df[value_field_name].dtype
-            schema_dtype = TYPES[self.data_table_schema[value_field_name]['type']]['pandas_dtype']
-            if field_dtype != schema_dtype:
-                raise ValueError('Value field {} has dtype {} but schema specifies dtype {}'.format(
-                    value_field_name,
-                    field_dtype,
-                    schema_dtype
-                ))
+        for field in self.fields:
+            if field.name in self.key_field_names:
+                logger.info('Checking dtype of key field: {}'.format(field.name))
+                field_dtype = df.index.get_level_values(field.name).dtype
+                schema_dtype = TYPES[field.type]['pandas_dtype']
+                if field_dtype != schema_dtype:
+                    raise ValueError('Key field {} has dtype {} but schema specifies dtype {}'.format(
+                        field.name,
+                        field_dtype,
+                        schema_dtype
+                    ))
+            else:
+                logger.info('Checking dtype of value field: {}'.format(field.name))
+                field_dtype = df[field.name].dtype
+                schema_dtype = TYPES[field.type]['pandas_dtype']
+                if field_dtype != schema_dtype:
+                    raise ValueError('Value field {} has dtype {} but schema specifies dtype {}'.format(
+                        field.name,
+                        field_dtype,
+                        schema_dtype
+                    ))
+
+class Field:
+    """
+    Class to define a generic field (table column) object
+    """
+    def __init__(
+        self,
+        name,
+        type,
+        max_len=None,
+        unique=False,
+        not_null=False
+    ):
+        """
+        Contructor for Field
+
+        A field consists of a type, an optional max length, and a set of
+        optional field-level constraints.
+
+        Types that are currently supported are 'integer', 'float', 'string',
+        'boolean', 'datetime', 'date' and 'list'.
+
+        The `max_len` option is currently only supported for the 'string' type.
+
+        The only field-level constraints that are currently supported are
+        `unique` and `not_null`. Primary and foreign key constraints are
+        specified at the table level instead.
+
+        Parameters:
+            name (str): The name of this field
+            type (str): The type of this field
+            max_len (int): The maximum length of the data in the field [Default: None]
+            unique (bool): Boolean indicating whether the values in this field must be unique [Default: False]
+            not_null (bool): Boolean indicating whether null values are disallowed in this field [Defaut: False]
+        """
+        self.name = name
+        self.type = type
+        self.max_len = max_len
+        self.unique = unique
+        self.not_null = not_null

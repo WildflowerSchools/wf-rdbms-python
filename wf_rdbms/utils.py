@@ -8,3 +8,6 @@ def to_date(object):
     except:
         date = None
     return date
+
+def series_to_list(object):
+    return object.where(pd.notnull(object), None).tolist()
