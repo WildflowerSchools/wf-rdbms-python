@@ -277,7 +277,6 @@ class Field:
         self,
         name,
         type,
-        max_len=None,
         unique=False,
         not_null=False
     ):
@@ -290,8 +289,6 @@ class Field:
         Types that are currently supported are 'integer', 'float', 'string',
         'boolean', 'datetime', 'date' and 'list'.
 
-        The `max_len` option is currently only supported for the 'string' type.
-
         The only field-level constraints that are currently supported are
         `unique` and `not_null`. Primary and foreign key constraints are
         specified at the table level instead.
@@ -299,12 +296,10 @@ class Field:
         Parameters:
             name (str): The name of this field
             type (str): The type of this field
-            max_len (int): The maximum length of the data in the field [Default: None]
             unique (bool): Boolean indicating whether the values in this field must be unique [Default: False]
             not_null (bool): Boolean indicating whether null values are disallowed in this field [Defaut: False]
         """
         self.name = name
         self.type = type
-        self.max_len = max_len
         self.unique = unique
         self.not_null = not_null
