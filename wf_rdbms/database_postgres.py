@@ -1,6 +1,7 @@
 from wf_rdbms.database import Database
 import psycopg2
 import psycopg2.sql
+import psycopg2.extras
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 import logging
 
@@ -165,3 +166,54 @@ class DatabasePostgres(Database):
             argument_list.append('NOT NULL')
         sql_string = psycopg2.sql.SQL(' ').join(argument_list)
         return sql_string
+
+    def create_records_from_dataframe(
+        self,
+        table_name,
+        dataframe,
+        check_field_names=True
+    ):
+        field_names = self.tables[table_name].field_names
+        dataframe = dataframe.reset_index()
+        if check_field_names:
+            if not set(field_names).issubset(set(dataframe.columns)):
+                raise ValueError('Dataframe does not contain all of the field names in the table')
+        records = dataframe.loc[:, field_names].to_dict(orient='records')
+        self.create_records_from_dict_list(
+            table_name=table_name,
+            records=records,
+            check_field_names=False
+        )
+
+    def create_records_from_dict_list(
+        self,
+        table_name,
+        records,
+        check_field_names=True
+    ):
+        field_names = self.tables[table_name].field_names
+        if check_field_names:
+            for index, record in enumerate(records):
+                if not set(field_names).issubset(set(record.keys())):
+                    raise ValueError('Record {} does not contain all of the field names in the table'.format(index))
+        sql_string = psycopg2.sql.SQL('INSERT INTO {} ({}) VALUES {}').format(
+            psycopg2.sql.Identifier(table_name),
+            psycopg2.sql.SQL(', ').join([psycopg2.sql.Identifier(field_name) for field_name in field_names]),
+            psycopg2.sql.Placeholder()
+        )
+        template = psycopg2.sql.SQL('({})').format(
+            psycopg2.sql.SQL(', ').join(
+                [psycopg2.sql.Placeholder(field_name) for field_name in field_names]
+            )
+        )
+        self.connect()
+        self.open_cursor()
+        psycopg2.extras.execute_values(
+            cur=self.cur,
+            sql=sql_string,
+            argslist=records,
+            template=template
+        )
+        self.conn.commit()
+        self.close_cursor()
+        self.close_connection()
