@@ -1,5 +1,6 @@
 import wf_rdbms.utils
 import pandas as pd
+from collections import OrderedDict
 import logging
 
 logger = logging.getLogger(__name__)
@@ -100,10 +101,10 @@ class Table:
             foreign_keys (list of tuple): Tuples consisting of target table name and fields from this table
         """
         self.name = name
-        self.fields = fields
+        self.fields = OrderedDict([(field.name, field) for field in fields])
         self.primary_key = primary_key
         self.foreign_keys = foreign_keys
-        self.field_names = [field.name for field in self.fields]
+        self.field_names = [field.name for field in self.fields.values()]
         self.key_field_names = primary_key
         self.value_field_names = [field_name for field_name in self.field_names if field_name not in self.key_field_names]
 
