@@ -50,13 +50,13 @@ class DatabasePostgres(Database):
             )
         return self.conn
 
-    def open_cursor(self):
+    def open_cursor(self, cursor_factory=None):
         if self.cur is not None:
             raise ValueError('Cursor already generated')
             return self.cur
         if self.conn is None:
             self.connect()
-        self.cur = self.conn.cursor()
+        self.cur = self.conn.cursor(cursor_factory=cursor_factory)
         return self.cur
 
     def close_connection(self):
@@ -218,3 +218,35 @@ class DatabasePostgres(Database):
         self.conn.commit()
         self.close_cursor()
         self.close_connection()
+
+    def fetch_records_as_dict_list(
+        self,
+        table_name,
+        requested_field_names=None
+    ):
+        field_names = self.tables[table_name].field_names
+        if requested_field_names is not None:
+            for requested_field_name in requested_field_names:
+                if requested_field_name not in field_names:
+                    raise ValueError('Requested field \'{}\' not in table'.format(requested_field_name))
+            select_sql_string = psycopg2.sql.SQL('{}').format(
+                psycopg2.sql.SQL(', ').join(
+                    [psycopg2.sql.Identifier(requested_field_name) for requested_field_name in requested_field_names]
+                )
+            )
+        else:
+            requested_field_names=field_names
+            select_sql_string = psycopg2.sql.SQL('*')
+        sql_string = psycopg2.sql.SQL('SELECT {} from {}').format(
+            select_sql_string,
+            psycopg2.sql.Identifier(table_name)
+        )
+        self.connect()
+        self.open_cursor()
+        self.cur.execute(sql_string)
+        results=self.cur.fetchall()
+        self.close_cursor()
+        self.close_connection()
+        records = [dict(zip(requested_field_names, result)) for result in results]
+        # records=results
+        return records
