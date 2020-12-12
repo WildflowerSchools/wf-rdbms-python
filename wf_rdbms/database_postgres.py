@@ -219,6 +219,21 @@ class DatabasePostgres(Database):
         self.close_cursor()
         self.close_connection()
 
+    def fetch_records_as_dataframe(
+        self,
+        table_name,
+        requested_field_names=None
+    ):
+        records = self.fetch_records_as_dict_list(
+            table_name,
+            requested_field_names=requested_field_names
+        )
+        if requested_field_names is None:
+            requested_field_names = self.tables[table_name].field_names
+        dtypes = dict([(requested_field_name, self.tables[table_name].fields[requested_field_name].type._pandas_dtype) for requested_field_name in requested_field_names])
+        df = pd.DataFrame.from_records(records).astype(dtypes)
+        return df
+
     def fetch_records_as_dict_list(
         self,
         table_name,
@@ -248,5 +263,4 @@ class DatabasePostgres(Database):
         self.close_cursor()
         self.close_connection()
         records = [dict(zip(requested_field_names, result)) for result in results]
-        # records=results
         return records

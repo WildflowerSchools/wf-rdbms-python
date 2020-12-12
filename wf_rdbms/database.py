@@ -287,6 +287,8 @@ class BoolType(FieldType):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._pandas_dtype = 'boolean'
+        if self.list:
+            self._pandas_dtype = 'object'
         self._sql_type = 'bool'
         if self.list:
             self._sql_type = self._sql_type + '[]'
@@ -306,6 +308,8 @@ class FloatType(FieldType):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._pandas_dtype = 'float'
+        if self.list:
+            self._pandas_dtype = 'object'
         self._sql_type = 'double'
         if self.list:
             self._sql_type = self._sql_type + '[]'
@@ -322,6 +326,8 @@ class IntType(FieldType):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._pandas_dtype = 'Int64'
+        if self.list:
+            self._pandas_dtype = 'object'
         self._sql_type = 'integer'
         if self.list:
             self._sql_type = self._sql_type + '[]'
@@ -338,6 +344,8 @@ class StrType(FieldType):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._pandas_dtype = 'string'
+        if self.list:
+            self._pandas_dtype = 'object'
         self._sql_type = 'text'
         if self.list:
             self._sql_type = self._sql_type + '[]'
@@ -354,6 +362,8 @@ class DateType(FieldType):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._pandas_dtype = 'object'
+        if self.list:
+            self._pandas_dtype = 'object'
         self._sql_type = 'date'
         if self.list:
             self._sql_type = self._sql_type + '[]'
@@ -370,6 +380,8 @@ class DatetimeUTCType(FieldType):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._pandas_dtype = pd.DatetimeTZDtype(unit='ns', tz='UTC')
+        if self.list:
+            self._pandas_dtype = 'object'
         self._sql_type = 'timestamptz'
         if self.list:
             self._sql_type = self._sql_type + '[]'
