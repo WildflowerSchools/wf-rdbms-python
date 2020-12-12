@@ -1,47 +1,8 @@
-import wf_rdbms.utils
 import pandas as pd
 from collections import OrderedDict
 import logging
 
 logger = logging.getLogger(__name__)
-
-TYPES = {
-    'integer': {
-        'pandas_dtype': 'Int64',
-        'to_pandas_series': lambda x: pd.Series(x, dtype='Int64'),
-        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(pd.Series(x, dtype='Int64'))
-    },
-    'float': {
-        'pandas_dtype': 'float',
-        'to_pandas_series': lambda x: pd.Series(x, dtype='float'),
-        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(pd.Series(x, dtype='float'))
-    },
-    'string': {
-        'pandas_dtype': 'string',
-        'to_pandas_series': lambda x: pd.Series(x, dtype='string'),
-        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(pd.Series(x, dtype='string'))
-    },
-    'boolean': {
-        'pandas_dtype': 'boolean',
-        'to_pandas_series': lambda x: pd.Series(x, dtype='boolean'),
-        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(pd.Series(x, dtype='boolean'))
-    },
-    'datetime': {
-        'pandas_dtype': 'datetime64[ns]',
-        'to_pandas_series': lambda x: pd.to_datetime(x),
-        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(pd.to_datetime(x).to_pydatetime())
-    },
-    'date': {
-        'pandas_dtype': 'object',
-        'to_pandas_series': lambda x: pd.Series(x).apply(wf_rdbms.utils.to_date),
-        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(pd.Series(x).apply(wf_rdbms.utils.to_date))
-    },
-    'list': {
-        'pandas_dtype': 'object',
-        'to_pandas_series': lambda x: pd.Series(x).where(pd.notnull(pd.Series(x)), None),
-        'to_python_list': lambda x: wf_rdbms.utils.series_to_list(d.Series(x).apply(lambda y: list(y) if pd.notnull(y) else None))
-    }
-}
 
 class Database:
     """
@@ -304,3 +265,119 @@ class Field:
         self.type = type
         self.unique = unique
         self.not_null = not_null
+
+class FieldType:
+    def __init__(self, list=False):
+        self.list=list
+
+    def to_python_object(self, object):
+        if self.list:
+            if isinstance(object, str):
+                object_list = [object]
+            else:
+                try:
+                    object_list = list(object)
+                except:
+                    object_list = [object]
+            return list(map(self._to_python_object, object_list))
+        else:
+            return self._to_python_object(object)
+
+class BoolType(FieldType):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pandas_dtype = 'boolean'
+        self._sql_type = 'bool'
+        if self.list:
+            self._sql_type = self._sql_type + '[]'
+
+    def _to_python_object(self, object):
+        if pd.isna(object) is True:
+            return None
+        if object in ['False', 'FALSE']:
+            return False
+        else:
+            return bool(object)
+
+    def _to_pandas_series(self, object):
+        return pd.Series(object, dtype='boolean')
+
+class FloatType(FieldType):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pandas_dtype = 'float'
+        self._sql_type = 'double'
+        if self.list:
+            self._sql_type = self._sql_type + '[]'
+
+    def _to_python_object(self, object):
+        if pd.isna(object) is True:
+            return None
+        return float(object)
+
+    def _to_pandas_series(self, object):
+        return pd.Series(object, dtype='float')
+
+class IntType(FieldType):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pandas_dtype = 'Int64'
+        self._sql_type = 'integer'
+        if self.list:
+            self._sql_type = self._sql_type + '[]'
+
+    def _to_python_object(self, object):
+        if pd.isna(object) is True:
+            return None
+        return int(object)
+
+    def _to_pandas_series(self, object):
+        return pd.Series(object, dtype='Int64')
+
+class StrType(FieldType):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pandas_dtype = 'string'
+        self._sql_type = 'text'
+        if self.list:
+            self._sql_type = self._sql_type + '[]'
+
+    def _to_python_object(self, object):
+        if pd.isna(object) is True:
+            return None
+        return str(object)
+
+    def _to_pandas_series(self, object):
+        return pd.Series(object, dtype='string')
+
+class DateType(FieldType):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pandas_dtype = 'object'
+        self._sql_type = 'date'
+        if self.list:
+            self._sql_type = self._sql_type + '[]'
+
+    def _to_python_object(self, object):
+        if pd.isna(object) is True:
+            return None
+        return pd.to_datetime(object).date()
+
+    def _to_pandas_series(self, object):
+        return pd.Series(object).apply(self._to_python_object)
+
+class DatetimeUTCType(FieldType):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pandas_dtype = pd.DatetimeTZDtype(unit='ns', tz='UTC')
+        self._sql_type = 'timestamptz'
+        if self.list:
+            self._sql_type = self._sql_type + '[]'
+
+    def _to_python_object(self, object):
+        if pd.isna(object) is True:
+            return None
+        return pd.to_datetime(object, utc=True).to_pydatetime()
+
+    def _to_pandas_series(self, object):
+        return pd.to_datetime(object, utc=True)
