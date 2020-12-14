@@ -173,7 +173,6 @@ class DatabasePostgres(Database):
         table_name,
         dataframe
     ):
-        field_names = self.tables[table_name].field_names
         dataframe = dataframe.reset_index()
         records = dataframe.to_dict(orient='records')
         self.create_records_from_dict_list(
@@ -213,6 +212,18 @@ class DatabasePostgres(Database):
         self.conn.commit()
         self.close_cursor()
         self.close_connection()
+
+    def update_records_from_dataframe(
+        self,
+        table_name,
+        dataframe
+    ):
+        dataframe = dataframe.reset_index()
+        records = dataframe.to_dict(orient='records')
+        self.update_records_from_dict_list(
+            table_name=table_name,
+            records=records
+        )
 
     def update_records_from_dict_list(
         self,
@@ -254,10 +265,6 @@ class DatabasePostgres(Database):
         )
         self.connect()
         self.open_cursor()
-        logger.info('Batch executing with SQL string \'{}\''.format(
-            sql_string.as_string(self.cur)
-        ))
-        # logger.info('Records:\n{}'.format(converted_records))
         psycopg2.extras.execute_batch(
             cur=self.cur,
             sql=sql_string,
@@ -282,12 +289,12 @@ class DatabasePostgres(Database):
                 ))
         converted_records = list()
         for index, record in enumerate(records):
-            if set(record.keys()) != set(included_fields):
-                raise ValueError('Fields are not consistent across records')
             converted_record = dict()
             for key, value in record.items():
                 if key in field_names:
                     converted_record[key] = self.tables[table_name].fields[key].type.to_python_object(record[key])
+            if set(converted_record.keys()) != set(included_fields):
+                raise ValueError('Fields are not consistent across records')
             converted_records.append(converted_record)
         return converted_records, included_fields
 
