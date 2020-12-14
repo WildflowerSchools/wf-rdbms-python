@@ -175,9 +175,7 @@ class DatabasePostgres(Database):
     ):
         field_names = self.tables[table_name].field_names
         dataframe = dataframe.reset_index()
-        if not set(field_names).issubset(set(dataframe.columns)):
-            raise ValueError('Dataframe does not contain all of the field names in the table')
-        records = dataframe.loc[:, field_names].to_dict(orient='records')
+        records = dataframe.to_dict(orient='records')
         self.create_records_from_dict_list(
             table_name=table_name,
             records=records
@@ -236,7 +234,7 @@ class DatabasePostgres(Database):
             for key, value in record.items():
                 if key in field_names:
                     included_fields.add(key)
-                converted_record[key] = self.tables[table_name].fields[key].type.to_python_object(record[key])
+                    converted_record[key] = self.tables[table_name].fields[key].type.to_python_object(record[key])
             converted_records.append(converted_record)
         return converted_records, included_fields
 
