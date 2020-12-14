@@ -214,6 +214,59 @@ class DatabasePostgres(Database):
         self.close_cursor()
         self.close_connection()
 
+    def update_records_from_dict_list(
+        self,
+        table_name,
+        records
+    ):
+        converted_records, included_fields = self.normalize_records_dict_list(
+            table_name,
+            records
+        )
+        primary_key = self.tables[table_name].primary_key
+        included_value_fields = list(set(included_fields).difference(set(primary_key)))
+        multiple_value_fields = (len(included_value_fields) > 1)
+        if multiple_value_fields:
+            value_field_identifiers_sql = psycopg2.sql.SQL('({})').format(
+                psycopg2.sql.SQL(', ').join(
+                    [psycopg2.sql.Identifier(field_name) for field_name in included_value_fields]
+                )
+            )
+            value_field_values_sql = psycopg2.sql.SQL('({})').format(
+                psycopg2.sql.SQL(', ').join(
+                    [psycopg2.sql.Placeholder(field_name) for field_name in included_value_fields]
+                )
+            )
+        else:
+            value_field_identifiers_sql = psycopg2.sql.Identifier(included_value_fields[0])
+            value_field_values_sql = psycopg2.sql.Placeholder(included_value_fields[0])
+        row_selector_sql = psycopg2.sql.SQL(' AND ').join(
+            [psycopg2.sql.SQL('{} = {}').format(
+                psycopg2.sql.Identifier(primary_key_field),
+                psycopg2.sql.Placeholder(primary_key_field)
+            ) for primary_key_field in primary_key]
+        )
+        sql_string = psycopg2.sql.SQL('UPDATE {} SET {} = {} WHERE {};').format(
+            psycopg2.sql.Identifier(table_name),
+            value_field_identifiers_sql,
+            value_field_values_sql,
+            row_selector_sql
+        )
+        self.connect()
+        self.open_cursor()
+        logger.info('Batch executing with SQL string \'{}\''.format(
+            sql_string.as_string(self.cur)
+        ))
+        # logger.info('Records:\n{}'.format(converted_records))
+        psycopg2.extras.execute_batch(
+            cur=self.cur,
+            sql=sql_string,
+            argslist=converted_records
+        )
+        self.conn.commit()
+        self.close_cursor()
+        self.close_connection()
+
     def normalize_records_dict_list(
         self,
         table_name,
@@ -221,19 +274,19 @@ class DatabasePostgres(Database):
     ):
         field_names = self.tables[table_name].field_names
         primary_key = self.tables[table_name].primary_key
+        included_fields = [field_name for field_name in field_names if field_name in set(records[0].keys())]
+        for primary_key_field in primary_key:
+            if primary_key_field not in set(included_fields):
+                raise ValueError('Records do not contain primary key field: {}'.format(
+                    primary_key_field
+                ))
         converted_records = list()
-        included_fields = set()
         for index, record in enumerate(records):
-            for primary_key_field in primary_key:
-                if primary_key_field not in record.keys():
-                    raise ValueError('Record {} does not contain primary key field: {}'.format(
-                        index,
-                        primary_key_field
-                    ))
+            if set(record.keys()) != set(included_fields):
+                raise ValueError('Fields are not consistent across records')
             converted_record = dict()
             for key, value in record.items():
                 if key in field_names:
-                    included_fields.add(key)
                     converted_record[key] = self.tables[table_name].fields[key].type.to_python_object(record[key])
             converted_records.append(converted_record)
         return converted_records, included_fields
