@@ -188,23 +188,20 @@ class DatabasePostgres(Database):
         table_name,
         records
     ):
+        converted_records, included_fields = self.normalize_records_dict_list(
+            table_name,
+            records
+        )
+        included_fields = list(included_fields)
         field_names = self.tables[table_name].field_names
-        converted_records = list()
-        for index, record in enumerate(records):
-            converted_record = dict()
-            for field_name in field_names:
-                if field_name not in record.keys():
-                    raise ValueError('Record {} does not contain field {}'.format(index, field_name))
-                converted_record[field_name] = self.tables[table_name].fields[field_name].type.to_python_object(record[field_name])
-            converted_records.append(converted_record)
         sql_string = psycopg2.sql.SQL('INSERT INTO {} ({}) VALUES {}').format(
             psycopg2.sql.Identifier(table_name),
-            psycopg2.sql.SQL(', ').join([psycopg2.sql.Identifier(field_name) for field_name in field_names]),
+            psycopg2.sql.SQL(', ').join([psycopg2.sql.Identifier(field_name) for field_name in included_fields]),
             psycopg2.sql.Placeholder()
         )
         template = psycopg2.sql.SQL('({})').format(
             psycopg2.sql.SQL(', ').join(
-                [psycopg2.sql.Placeholder(field_name) for field_name in field_names]
+                [psycopg2.sql.Placeholder(field_name) for field_name in included_fields]
             )
         )
         self.connect()
@@ -218,6 +215,30 @@ class DatabasePostgres(Database):
         self.conn.commit()
         self.close_cursor()
         self.close_connection()
+
+    def normalize_records_dict_list(
+        self,
+        table_name,
+        records
+    ):
+        field_names = self.tables[table_name].field_names
+        primary_key = self.tables[table_name].primary_key
+        converted_records = list()
+        included_fields = set()
+        for index, record in enumerate(records):
+            for primary_key_field in primary_key:
+                if primary_key_field not in record.keys():
+                    raise ValueError('Record {} does not contain primary key field: {}'.format(
+                        index,
+                        primary_key_field
+                    ))
+            converted_record = dict()
+            for key, value in record.items():
+                if key in field_names:
+                    included_fields.add(key)
+                converted_record[key] = self.tables[table_name].fields[key].type.to_python_object(record[key])
+            converted_records.append(converted_record)
+        return converted_records, included_fields
 
     def fetch_records_as_dataframe(
         self,
